@@ -6,8 +6,8 @@ WORKDIR /app
 #se copia al contenedor
 COPY . .
 
-#se instalan dependencias
-RUN pip install --no-cache-dir flask
+#se instalan dependencias y pip-audit
+RUN pip install --no-cache-dir flask pip-audit
 
 #creacion de base de datos al construir la imagen
 RUN python create_db.py
