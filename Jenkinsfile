@@ -6,7 +6,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "vulnerable_flask_app"
-        COMPOSE_DIR = "C:\Users\jppaz\OneDrive\Escritorio\monitoring"
+        COMPOSE_DIR = "C:/Users/jppaz/OneDrive/Escritorio/monitoring"
     }
 
     stages {
