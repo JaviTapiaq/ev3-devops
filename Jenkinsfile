@@ -5,44 +5,40 @@ pipeline {
     agent any
 
     environment {
-        //nombre de la imagen Docker a construir
-        IMAGE_NAME = "vulnerable_flask_app"
+        DOCKER_IMAGE = "vulnerable_flask_app"
+        CONTAINER_NAME = "vulnerable_flask_app"
     }
 
     stages {
-        stage('Checkout SCM') {
+        stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/JaviTapiaq/ev3-devops.git'
+                checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                //construye imagen usando Docker
-                bat "docker build -t %IMAGE_NAME% ."
+                bat "docker build -t %DOCKER_IMAGE% ."
             }
         }
 
         stage('Run Container') {
             steps {
-                // Corre el contenedor en segundo plano
-                bat "docker run -d -p 5000:5000 --name %IMAGE_NAME% %IMAGE_NAME%"
+                bat "docker run -d -p 5000:5000 --name %CONTAINER_NAME% %DOCKER_IMAGE%"
             }
         }
 
         stage('Smoke Tests') {
             steps {
-                //verifica que la app está corriendo
-                bat "curl http://localhost:5000/"
+                // acceso a contenedor
+                bat "curl http://host.docker.internal:5000/"
             }
         }
     }
 
     post {
         always {
-            //elimina el contenedor si existe
-            bat "docker rm -f %IMAGE_NAME% || echo Container not found"
+            bat "docker rm -f %CONTAINER_NAME% || echo Container not found"
         }
     }
 }
