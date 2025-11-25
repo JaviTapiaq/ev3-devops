@@ -53,9 +53,35 @@ pipeline {
             steps {
                 echo "Ejecutando contenedor de la aplicación..."
                 bat """
+                    docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}
+                """
+            }
+        }
 
+        stage('OWASP ZAP Security Scan') {
+            steps {
+                echo "Ejecutando OWASP ZAP Scan..."
+                script {
+                    // Ejecuta ZAP contra la aplicación
+                    def zapStatus = bat(script: """
+                        docker run --rm -t owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r ${ZAP_REPORT_HTML}
+                    """, returnStatus: true)
 
+                    if (zapStatus != 0) {
+                        echo "OWASP ZAP detectó posibles vulnerabilidades. Revisar reporte."
+                    }
+                }
+                archiveArtifacts artifacts: "${ZAP_REPORT_HTML}", fingerprint: true
+            }
+        }
+    }
 
-
-
-
+    post {
+        always {
+            echo "Limpiando contenedores e imágenes..."
+            bat "docker rm -f ${CONTAINER_NAME} || echo Contenedor no encontrado"
+            bat "docker rmi -f ${IMAGE_NAME} || echo Imagen no encontrada"
+            echo "Pipeline finalizado."
+        }
+    }
+}
