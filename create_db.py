@@ -33,7 +33,7 @@ c.execute('''
 
 # Crear la tabla de comentarios
 c.execute('''
-    CREATE TABLE comments (
+    CREATE TABLE IF NOT EXISTS comments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         comment TEXT NOT NULL,
