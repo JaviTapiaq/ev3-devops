@@ -28,12 +28,14 @@ pipeline {
         stage('Security Audit & Fix') {
             steps {
                 echo 'Ejecutando auditoría de seguridad con pip-audit...'
+                // Ejecuta pip-audit y continúa
                 bat """
-                docker run --rm ${APP_NAME} pip-audit > pip_audit_report.txt || echo "Se encontraron vulnerabilidades"
+                docker run --rm ${APP_NAME} pip-audit > pip_audit_report.txt 2>&1 || echo "Se encontraron vulnerabilidades"
                 """
                 archiveArtifacts artifacts: 'pip_audit_report.txt', allowEmptyArchive: true
             }
         }
+
 
         stage('Run Container') {
             steps {
