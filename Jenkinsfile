@@ -21,11 +21,11 @@ pipeline {
             steps {
                 script {
                     echo "Ejecutando auditoría de seguridad con pip-audit..."
-                    // Ejecuta pip-audit directamente sobre la imagen y elimina el contenedor después
-                    bat 'docker run --rm vulnerable_flask_app pip install pip-audit && docker run --rm vulnerable_flask_app pip-audit'
+                    bat 'docker run --rm vulnerable_flask_app pip-audit'
                 }
             }
         }
+
 
         stage('Run Container') {
             steps {
