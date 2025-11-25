@@ -30,8 +30,22 @@ pipeline {
 
         stage('Smoke Tests') {
             steps {
-                // acceso a contenedor
-                bat "curl http://host.docker.internal:5000/"
+                //espera hasta que Flask esté listo
+                script {
+                    def retries = 15
+                    def ready = false
+                    for (int i = 0; i < retries; i++) {
+                        def result = bat(script: "curl -s -o NUL -w \"%{http_code}\" http://host.docker.internal:5000/", returnStdout: true).trim()
+                        if (result == "200") {
+                            ready = true
+                            break
+                        }
+                        sleep 2
+                    }
+                    if (!ready) {
+                        error "Flask container no respondió en el tiempo esperado"
+                    }
+                }
             }
         }
     }
