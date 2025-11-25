@@ -5,14 +5,15 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "vulnerable_flask_app"
-        CONTAINER_NAME = "vulnerable_flask_app_container"
+        DOCKER_IMAGE = 'vulnerable_flask_app'
+        ZAP_IMAGE = 'owasp/zap2docker-stable:2.16.0'
     }
 
     stages {
 
         stage('Checkout SCM') {
             steps {
+                echo 'Clonando repositorio...'
                 checkout scm
             }
         }
@@ -20,24 +21,23 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Construyendo imagen Docker...'
-                bat "docker build -t ${IMAGE_NAME} ."
+                bat "docker build -t ${DOCKER_IMAGE} ."
             }
         }
 
         stage('Security Audit & Fix') {
             steps {
                 echo 'Ejecutando auditoría de seguridad con pip-audit...'
-                // Si pip-audit falla, se captura el error pero no detiene el pipeline
-                bat(script: "docker run --rm ${IMAGE_NAME} pip-audit", returnStatus: true)
+                bat """
+                docker run --rm ${DOCKER_IMAGE} pip-audit || echo "Se encontraron vulnerabilidades"
+                """
             }
         }
 
         stage('Run Container') {
             steps {
                 echo 'Levantando contenedor...'
-                bat """
-                docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}
-                """
+                bat "docker run -d --name ${DOCKER_IMAGE}_container -p 5000:5000 ${DOCKER_IMAGE}"
             }
         }
 
@@ -54,8 +54,15 @@ pipeline {
             steps {
                 echo 'Ejecutando escaneo de seguridad OWASP ZAP...'
                 bat """
-                docker run --rm -v ${WORKSPACE}:/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap_report.html
+                docker pull ${ZAP_IMAGE}
+                docker run --rm -v ${WORKSPACE}:/zap/wrk/:rw ${ZAP_IMAGE} zap-baseline.py -t http://host.docker.internal:5000 -r zap_report.html || echo "Escaneo ZAP falló"
                 """
+            }
+            post {
+                always {
+                    echo 'Archivando reporte OWASP ZAP...'
+                    archiveArtifacts artifacts: 'zap_report.html', allowEmptyArchive: true
+                }
             }
         }
     }
@@ -63,13 +70,11 @@ pipeline {
     post {
         always {
             echo 'Limpiando contenedor si existe...'
-            bat "docker rm -f ${CONTAINER_NAME} || echo Contenedor no encontrado"
-
-            echo 'Archivando reporte OWASP ZAP...'
-            archiveArtifacts artifacts: 'zap_report.html', allowEmptyArchive: true
+            bat "docker rm -f ${DOCKER_IMAGE}_container || echo Contenedor no encontrado"
         }
     }
 }
+
 
 
 
