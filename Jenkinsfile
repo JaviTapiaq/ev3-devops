@@ -5,61 +5,72 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "vulnerable_flask_app"
-        PORT = "5000"
+        IMAGE_NAME = "vulnerable_flask_app"
+        CONTAINER_NAME = "vulnerable_flask_app_container"
     }
 
     stages {
 
         stage('Checkout SCM') {
             steps {
-                echo 'Clonando repositorio...'
+                echo "Clonando repositorio..."
                 checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo 'Construyendo imagen Docker...'
-                bat "docker build -t ${APP_NAME} ."
+                echo "Construyendo imagen Docker..."
+                bat "docker build -t ${IMAGE_NAME} ."
             }
         }
 
         stage('Security Audit & Fix') {
             steps {
-                echo 'Ejecutando auditoría de seguridad con pip-audit...'
-                // Ejecuta pip-audit y continúa
+                echo "Ejecutando auditoría de seguridad con pip-audit..."
                 bat """
-                docker run --rm ${APP_NAME} pip-audit > pip_audit_report.txt 2>&1 || echo "Se encontraron vulnerabilidades"
+                    docker run --rm ${IMAGE_NAME} pip-audit > pip_audit_report.txt 2>&1 || echo "Se encontraron vulnerabilidades"
                 """
-                archiveArtifacts artifacts: 'pip_audit_report.txt', allowEmptyArchive: true
+                //se archiva reporte de pip-audit
+                archiveArtifacts artifacts: 'pip_audit_report.txt', fingerprint: true
+            }
+            //no falla el pipeline aunque haya vulnerabilidades
+            post {
+                always {
+                    echo "pip-audit terminado. Revisar pip_audit_report.txt"
+                }
             }
         }
 
-
         stage('Run Container') {
             steps {
-                echo 'Levantando contenedor de la app...'
-                bat "docker run -d --name ${APP_NAME}_container -p ${PORT}:${PORT} ${APP_NAME}"
+                echo "Ejecutando contenedor..."
+                bat """
+                    docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}
+                """
             }
         }
 
         stage('OWASP ZAP Security Scan') {
             steps {
-                echo 'Ejecutando OWASP ZAP...'
-                // Escaneo rápido y generación de reporte
+                echo "Ejecutando escaneo OWASP ZAP..."
+                //comandos zap
                 bat """
-                zap-cli quick-scan --self-contained --start-options '-config api.disablekey=true' http://localhost:${PORT} -r zap_report.html
+                    zap.sh -daemon -port 8080 -host 0.0.0.0
+                    zap-cli quick-scan http://localhost:5000
+                    zap-cli report -o zap_report.html -f html
                 """
-                archiveArtifacts artifacts: 'zap_report.html', allowEmptyArchive: true
+                //se archiva reporte de OWASP ZAP
+                archiveArtifacts artifacts: 'zap_report.html', fingerprint: true
             }
         }
     }
 
     post {
         always {
-            echo 'Limpiando contenedor si existe...'
-            bat "docker rm -f ${APP_NAME}_container || echo Contenedor no encontrado"
+            echo "Limpiando contenedores y recursos..."
+            bat "docker rm -f ${CONTAINER_NAME} || echo Contenedor no encontrado"
+            bat "docker rmi -f ${IMAGE_NAME} || echo Imagen no encontrada"
         }
     }
 }
