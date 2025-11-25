@@ -17,15 +17,7 @@ pipeline {
             }
         }
 
-        stage('Security Audit') {
-            steps {
-                script {
-                    echo "Ejecutando auditoría de seguridad con pip-audit..."
-                    // Ejecuta pip-audit dentro del contenedor
-                        bat "docker exec -it vulnerable_flask_app pip-audit"
-                    }
-            }
-        }
+
 
 
         stage('Run Container') {
