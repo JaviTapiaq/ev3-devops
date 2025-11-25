@@ -53,8 +53,8 @@ pipeline {
         stage('Smoke Tests') {
             steps {
                 echo "Ejecutando pruebas básicas (Smoke Tests)..."
-                // Ejemplo: se revisa si el contenedor responde
                 bat """
+                timeout /t 5
                 curl -f http://localhost:5000 || (echo "Smoke Test falló" & exit 1)
                 """
             }
