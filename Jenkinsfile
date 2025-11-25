@@ -1,3 +1,7 @@
+// Jenkinsfile
+// Integrantes: Javiera Tapia Quintana Rut:
+//              Joaquin Diez Gioia Rut:
+
 pipeline {
     agent any
 
