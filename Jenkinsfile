@@ -5,65 +5,94 @@ pipeline {
     agent any
 
     environment {
-        APP_IMAGE = "vulnerable_flask_app"
-        APP_CONTAINER = "vulnerable_flask_app_container"
+        IMAGE_NAME = "vulnerable_flask_app"
+        COMPOSE_DIR = "C:\Users\jppaz\OneDrive\Escritorio\monitoring"
     }
 
     stages {
-
         stage('Checkout SCM') {
             steps {
-                echo "Clonando repositorio..."
                 checkout scm
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Up Docker Compose') {
             steps {
-                echo "Construyendo imagen Docker..."
-                bat "docker build -t %APP_IMAGE% ."
-                bat "docker run --rm %APP_IMAGE% python create_db.py"
-            }
-        }
-
-        stage('Security Audit (pip-audit)') {
-            steps {
-                echo "Ejecutando pip-audit..."
-                script {
-                    bat "docker run --rm %APP_IMAGE% pip-audit -f json 1>pip_audit_report.json || echo 'pip-audit detectó vulnerabilidades'"
-                    bat "docker run --rm %APP_IMAGE% pip-audit 1>pip_audit_report.txt || echo 'pip-audit detectó vulnerabilidades'"
-                    echo "Se encontraron vulnerabilidades, revisa los reportes."
+                dir("${COMPOSE_DIR}") {
+                    echo "Construyendo imagen de la app y levantando servicios con docker-compose..."
+                    bat "docker-compose build ${IMAGE_NAME}"
+                    bat "docker-compose up -d"
+                    echo "Esperando a que la app esté lista..."
+                    bat "timeout /t 5"
                 }
-                archiveArtifacts artifacts: 'pip_audit_report.*', allowEmptyArchive: true
             }
         }
 
-        stage('Run Application Container') {
+        stage('Security Audit & Fix') {
             steps {
-                echo "Ejecutando contenedor de la aplicación..."
-                bat "docker run -d --name %APP_CONTAINER% -p 5000:5000 %APP_IMAGE%"
+                dir("${COMPOSE_DIR}") {
+                    echo "Ejecutando pip-audit en la app..."
+                    script {
+                        def auditResult = bat(script: "docker-compose run --rm ${IMAGE_NAME} pip-audit", returnStatus: true)
+                        if (auditResult != 0) {
+                            echo "Vulnerabilidades encontradas, actualizando pip..."
+                            bat "docker-compose run --rm ${IMAGE_NAME} python -m pip install --upgrade pip"
+                            echo "Reconstruyendo imagen de la app..."
+                            bat "docker-compose build ${IMAGE_NAME}"
+                            bat "docker-compose up -d ${IMAGE_NAME}"
+                        } else {
+                            echo "No se encontraron vulnerabilidades."
+                        }
+                    }
+                }
             }
         }
 
         stage('OWASP ZAP Security Scan') {
             steps {
-                echo "Ejecutando OWASP ZAP Scan..."
-                script {
+                dir("${COMPOSE_DIR}") {
+                    echo "Ejecutando escaneo OWASP ZAP..."
                     bat """
-                    docker pull owasp/zap2docker-stable
-                    docker run --rm -t -v %CD%:/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r owasp_zap_report.html || echo 'ZAP scan finalizado con posibles alertas'
+                    docker-compose run --rm zap \
+                    zap-baseline.py -t http://${IMAGE_NAME}:5000 -r zap_report.html
                     """
+                    echo "Escaneo completado. Reporte generado en zap_report.html"
                 }
-                archiveArtifacts artifacts: 'owasp_zap_report.html', allowEmptyArchive: true
+            }
+        }
+
+        stage('Smoke Tests') {
+            steps {
+                dir("${COMPOSE_DIR}") {
+                    echo "Ejecutando pruebas básicas (Smoke Tests)..."
+                    bat "curl -f http://${IMAGE_NAME}:5000 || (echo 'Smoke Test falló' & exit 1)"
+                }
+            }
+        }
+
+        stage('Monitoring Check') {
+            steps {
+                dir("${COMPOSE_DIR}") {
+                    echo "Verificando que Prometheus y Grafana estén levantados..."
+                    bat "curl -f http://localhost:9090 || echo 'Prometheus no disponible'"
+                    bat "curl -f http://localhost:3000 || echo 'Grafana no disponible'"
+                }
             }
         }
     }
 
     post {
         always {
-            echo "Limpiando contenedores e imágenes..."
-            bat "docker rm -f %APP_CONTAINER% || echo Contenedor no encontrado"
-            bat "docker rmi -f %APP_IMAGE% || echo Imagen no encontrada"
+            dir("${COMPOSE_DIR}") {
+                echo "Deteniendo y limpiando todos los contenedores..."
+                bat "docker-compose down"
+            }
+        }
+        success {
+            echo "Pipeline finalizado correctamente."
+        }
+        failure {
+            echo "Pipeline finalizado con errores."
         }
     }
 }
