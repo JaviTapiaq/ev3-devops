@@ -4,6 +4,11 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = "vulnerable_flask_app"
+        CONTAINER_NAME = "vulnerable_flask_app_container"
+    }
+
     stages {
         stage('Checkout SCM') {
             steps {
@@ -13,55 +18,41 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                bat 'docker build -t vulnerable_flask_app .'
+                bat "docker build -t ${IMAGE_NAME} ."
             }
         }
 
         stage('Security Audit') {
             steps {
-                script {
-                    echo "Ejecutando auditoría de seguridad con pip-audit..."
-                    bat 'docker run --rm vulnerable_flask_app pip-audit'
-                }
+                echo "Ejecutando auditoría de seguridad con pip-audit..."
+                // Contenedor temporal para audit, se elimina al terminar
+                bat "docker run --rm ${IMAGE_NAME} pip-audit"
             }
         }
 
-
         stage('Run Container') {
             steps {
-                bat 'docker run -d -p 5000:5000 --name vulnerable_flask_app vulnerable_flask_app'
+                echo "Levantando contenedor de la aplicación..."
+                // Levantar contenedor de forma persistente en background
+                bat "docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}"
+                // Se espera unos segundos para que la app inicie
+                bat "timeout /t 5"
             }
         }
 
         stage('Smoke Tests') {
             steps {
-                script {
-                    bat """
-                    @echo off
-                    setlocal enabledelayedexpansion
-                    set URL=http://host.docker.internal:5000/
-                    set RETRIES=10
-
-                    for /L %%i in (1,1,!RETRIES!) do (
-                        curl !URL! -s -o NUL
-                        if !errorlevel! == 0 (
-                            echo Flask container is ready
-                            exit /b 0
-                        )
-                        echo Waiting for Flask... retry %%i
-                        timeout /t 2 >nul
-                    )
-                    echo Flask container did not start in time
-                    exit /b 1
-                    """
-                }
+                echo "Ejecutando tests de humo..."
+                // Ejemplo: test simple de que la app responde
+                bat "curl http://localhost:5000/"
             }
         }
     }
 
     post {
         always {
-            bat 'docker rm -f vulnerable_flask_app || echo Container not found'
+            echo "Limpiando contenedor si existe..."
+            bat "docker rm -f ${CONTAINER_NAME} || echo Contenedor no encontrado"
         }
     }
 }
