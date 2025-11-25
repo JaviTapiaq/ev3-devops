@@ -1,55 +1,48 @@
 // Jenkinsfile
 // Integrantes: Javiera Tapia Quintana Rut:
 //              Joaquin Diez Gioia Rut:
-
 pipeline {
     agent any
 
     environment {
+        //nombre de la imagen Docker a construir
         IMAGE_NAME = "vulnerable_flask_app"
-        CONTAINER_NAME = "vuln_flask"
-        PORT = "5000"
     }
 
     stages {
-
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
-                git branch: 'main', url: 'https://github.com/JaviTapiaq/ev3-devops.git'
+                git branch: 'main',
+                    url: 'https://github.com/JaviTapiaq/ev3-devops.git'
             }
         }
 
-        stage('Build') {
+        stage('Build Docker Image') {
             steps {
-                bat 'docker build -t %IMAGE_NAME% .'
+                //construye imagen usando Docker
+                bat "docker build -t %IMAGE_NAME% ."
             }
         }
 
-        stage('Unit Tests (Basic)') {
+        stage('Run Container') {
             steps {
-                bat 'echo Running basic test...'
-                bat 'python create_db.py'
+                // Corre el contenedor en segundo plano
+                bat "docker run -d -p 5000:5000 --name %IMAGE_NAME% %IMAGE_NAME%"
             }
         }
 
-        stage('Run container') {
+        stage('Smoke Tests') {
             steps {
-                bat 'docker rm -f %CONTAINER_NAME% || exit 0'
-                bat 'docker run -d --name %CONTAINER_NAME% -p 5000:5000 %IMAGE_NAME%'
+                //verifica que la app está corriendo
+                bat "curl http://localhost:5000/"
             }
         }
+    }
 
-        stage("Smoke Tests") {
-            steps {
-                bat 'timeout /t 5 /nobreak'
-                bat 'curl -Is http://localhost:5000 | findstr "HTTP/"'
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                echo "Application is deployed locally in Docker"
-            }
+    post {
+        always {
+            //elimina el contenedor si existe
+            bat "docker rm -f %IMAGE_NAME% || echo Container not found"
         }
     }
 }
