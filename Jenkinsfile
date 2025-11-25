@@ -5,11 +5,8 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "vulnerable_flask_app"
-        CONTAINER_NAME = "vulnerable_flask_app_container"
-        PIP_AUDIT_JSON = "pip_audit_report.json"
-        PIP_AUDIT_TXT  = "pip_audit_report.txt"
-        ZAP_REPORT_HTML = "owasp_zap_report.html"
+        APP_IMAGE = "vulnerable_flask_app"
+        APP_CONTAINER = "vulnerable_flask_app_container"
     }
 
     stages {
@@ -24,7 +21,8 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo "Construyendo imagen Docker..."
-                bat "docker build -t ${IMAGE_NAME} ."
+                bat "docker build -t %APP_IMAGE% ."
+                bat "docker run --rm %APP_IMAGE% python create_db.py"
             }
         }
 
@@ -32,29 +30,18 @@ pipeline {
             steps {
                 echo "Ejecutando pip-audit..."
                 script {
-                    // Ejecuta pip-audit sin detener el pipeline si encuentra vulnerabilidades
-                    def statusJson = bat(script: "docker run --rm ${IMAGE_NAME} pip-audit -f json > ${PIP_AUDIT_JSON}", returnStatus: true)
-                    def statusTxt  = bat(script: "docker run --rm ${IMAGE_NAME} pip-audit > ${PIP_AUDIT_TXT}", returnStatus: true)
-
-                    if (statusJson != 0 || statusTxt != 0) {
-                        echo "Se encontraron vulnerabilidades, revisa los reportes."
-                    }
+                    bat "docker run --rm %APP_IMAGE% pip-audit -f json 1>pip_audit_report.json || echo 'pip-audit detectó vulnerabilidades'"
+                    bat "docker run --rm %APP_IMAGE% pip-audit 1>pip_audit_report.txt || echo 'pip-audit detectó vulnerabilidades'"
+                    echo "Se encontraron vulnerabilidades, revisa los reportes."
                 }
-                archiveArtifacts artifacts: "${PIP_AUDIT_JSON},${PIP_AUDIT_TXT}", fingerprint: true
-            }
-            post {
-                always {
-                    echo "pip-audit finalizado. Revisar reportes."
-                }
+                archiveArtifacts artifacts: 'pip_audit_report.*', allowEmptyArchive: true
             }
         }
 
         stage('Run Application Container') {
             steps {
                 echo "Ejecutando contenedor de la aplicación..."
-                bat """
-                    docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}
-                """
+                bat "docker run -d --name %APP_CONTAINER% -p 5000:5000 %APP_IMAGE%"
             }
         }
 
@@ -62,16 +49,12 @@ pipeline {
             steps {
                 echo "Ejecutando OWASP ZAP Scan..."
                 script {
-                    // Ejecuta ZAP contra la aplicación
-                    def zapStatus = bat(script: """
-                        docker run --rm -t owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r ${ZAP_REPORT_HTML}
-                    """, returnStatus: true)
-
-                    if (zapStatus != 0) {
-                        echo "OWASP ZAP detectó posibles vulnerabilidades. Revisar reporte."
-                    }
+                    bat """
+                    docker pull owasp/zap2docker-stable
+                    docker run --rm -t -v %CD%:/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r owasp_zap_report.html || echo 'ZAP scan finalizado con posibles alertas'
+                    """
                 }
-                archiveArtifacts artifacts: "${ZAP_REPORT_HTML}", fingerprint: true
+                archiveArtifacts artifacts: 'owasp_zap_report.html', allowEmptyArchive: true
             }
         }
     }
@@ -79,9 +62,8 @@ pipeline {
     post {
         always {
             echo "Limpiando contenedores e imágenes..."
-            bat "docker rm -f ${CONTAINER_NAME} || echo Contenedor no encontrado"
-            bat "docker rmi -f ${IMAGE_NAME} || echo Imagen no encontrada"
-            echo "Pipeline finalizado."
+            bat "docker rm -f %APP_CONTAINER% || echo Contenedor no encontrado"
+            bat "docker rmi -f %APP_IMAGE% || echo Imagen no encontrada"
         }
     }
 }
