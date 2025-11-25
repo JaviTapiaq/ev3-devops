@@ -21,28 +21,28 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'docker build -t $IMAGE_NAME .'
+                bat 'docker build -t %IMAGE_NAME% .'
             }
         }
 
         stage('Unit Tests (Basic)') {
             steps {
-                sh 'echo "Running basic test..."'
-                sh 'python create_db.py'
+                bat 'echo Running basic test...'
+                bat 'python create_db.py'
             }
         }
 
         stage('Run container') {
             steps {
-                sh 'docker rm -f $CONTAINER_NAME || true'
-                sh 'docker run -d --name $CONTAINER_NAME -p 5000:5000 $IMAGE_NAME'
+                bat 'docker rm -f %CONTAINER_NAME% || exit 0'
+                bat 'docker run -d --name %CONTAINER_NAME% -p 5000:5000 %IMAGE_NAME%'
             }
         }
 
         stage("Smoke Tests") {
             steps {
-                sh 'sleep 5'
-                sh 'curl -Is http://localhost:5000 | head -n 1'
+                bat 'timeout /t 5 /nobreak'
+                bat 'curl -Is http://localhost:5000 | findstr "HTTP/"'
             }
         }
 
