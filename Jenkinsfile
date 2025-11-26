@@ -1,6 +1,6 @@
 // Jenkinsfile
-// Integrantes: Javiera Tapia  Rut:
-//              Joaquin Diez   Rut:
+// Integrantes: Javiera Tapia  Rut: 20533877-2
+//              Joaquin Diez   Rut: 21302876-6
 pipeline {
     agent any
 
