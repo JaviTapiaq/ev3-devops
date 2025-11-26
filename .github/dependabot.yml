@@ -1,16 +1,21 @@
 version: 2
 updates:
+  # --- DEPENDENCIAS DE PYTHON ---
   - package-ecosystem: "pip"
-    directory: "/" 
+    directory: "/"             # requirements.txt está en raíz
     schedule:
-      interval: "weekly"
+      interval: "weekly"      
     open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "all" # actualiza prod + dev
 
+  # --- IMÁGENES DOCKER ---
   - package-ecosystem: "docker"
-    directory: "/"
+    directory: "/"             # Dockerfile está en raíz
     schedule:
       interval: "weekly"
 
+  # --- GITHUB ACTIONS ---
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
