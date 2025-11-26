@@ -1,7 +1,7 @@
 #Javiera Tapia 20533877-2
 #Joaquin Diez 21302876-6
 
-FROM python:3.10-slim
+FROM python:3.14-slim
 
 #carpeta de trabajo
 WORKDIR /app
